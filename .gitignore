@@ -1,0 +1,5 @@
+build/
+3rdparty/
+.idea/
+*.user
+config.ini
