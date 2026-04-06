@@ -1493,11 +1493,31 @@ void HyperVManager::getVMProcessorAdvancedAsync(const QString& vmName,
                                                 const std::function<void(const VMProcessorAdvancedSettings&, const QString&)>& callback)
 {
     const QString cmd = QString(
-        "Get-VMProcessor -VMName %1 | Select-Object Count, Reserve, Maximum, "
-        "RelativeWeight, ExposeVirtualizationExtensions, "
-        "@{N='CompatibilityForMigration';E={$_.CompatibilityForMigrationEnabled}}, "
-        "@{N='HideHypervisor';E={$_.EnableHostResourceProtection}} "
-        "| ConvertTo-Json -Compress").arg(quotePS(vmName));
+        "$vmn = %1; "
+        "$p = Get-VMProcessor -VMName $vmn; "
+        "$wmi = @{Hide=$false;Spec=$false;Sock=$false}; "
+        "try { "
+        "$vm = Get-WmiObject -Namespace 'root\\virtualization\\v2' "
+        "-Class Msvm_ComputerSystem -Filter ('ElementName=''' + $vmn + ''''); "
+        "$vssd = ($vm.GetRelated('Msvm_VirtualSystemSettingData') | Select-Object -First 1); "
+        "$proc = ($vssd.GetRelated('Msvm_ProcessorSettingData') | Select-Object -First 1); "
+        "$wmi.Hide = [bool]$proc.HideHypervisorPresent; "
+        "$wmi.Spec = [bool]$proc.DisableSpeculationControls; "
+        "$wmi.Sock = [bool]$proc.EnableSocketTopology "
+        "} catch {}; "
+        "[ordered]@{"
+        "Count=$p.Count; Reserve=$p.Reserve; Maximum=$p.Maximum; "
+        "RelativeWeight=$p.RelativeWeight; "
+        "ExposeVirtualizationExtensions=[bool]$p.ExposeVirtualizationExtensions; "
+        "EnableHostResourceProtection=[bool]$p.EnableHostResourceProtection; "
+        "CompatibilityForMigrationEnabled=[bool]$p.CompatibilityForMigrationEnabled; "
+        "CompatibilityForOlderOperatingSystemsEnabled=[bool]$p.CompatibilityForOlderOperatingSystemsEnabled; "
+        "HwThreadCountPerCore=[int]$p.HwThreadCountPerCore; "
+        "AllowACountMCount=[bool]$p.AllowACountMCount; "
+        "HideHypervisorPresent=$wmi.Hide; "
+        "DisableSpeculationControls=$wmi.Spec; "
+        "EnableSocketTopology=$wmi.Sock"
+        "} | ConvertTo-Json -Compress").arg(quotePS(vmName));
 
     runPowerShellCallback(cmd, [callback](int exitCode, const QString& stdOut, const QString& stdErr, bool timedOut)
     {
@@ -1522,24 +1542,42 @@ void HyperVManager::getVMProcessorAdvancedAsync(const QString& vmName,
         settings.limit = obj["Maximum"].toInt(100);
         settings.weight = obj["RelativeWeight"].toInt(100);
         settings.exposeVirtualizationExtensions = obj["ExposeVirtualizationExtensions"].toBool();
-        settings.nestedVirtualization = settings.exposeVirtualizationExtensions;
-        settings.hideHypervisor = obj["HideHypervisor"].toBool();
+        settings.enableHostResourceProtection = obj["EnableHostResourceProtection"].toBool();
+        settings.compatibilityForMigrationEnabled = obj["CompatibilityForMigrationEnabled"].toBool();
+        settings.compatibilityForOlderOperatingSystemsEnabled = obj["CompatibilityForOlderOperatingSystemsEnabled"].toBool();
+        settings.hwThreadCountPerCore = obj["HwThreadCountPerCore"].toInt(0);
+        settings.hideHypervisorPresent = obj["HideHypervisorPresent"].toBool();
+        settings.allowACountMCount = obj["AllowACountMCount"].toBool();
+        settings.disableSpeculationControls = obj["DisableSpeculationControls"].toBool();
+        settings.enableSocketTopology = obj["EnableSocketTopology"].toBool();
         callback(settings, {});
     });
 }
 
 void HyperVManager::applyVMProcessorAdvanced(const QString& vmName, const VMProcessorAdvancedSettings& settings)
 {
-    const QString cmd = QString(
-        "Set-VMProcessor -VMName %1 -Count %2 -Reserve %3 -Maximum %4 -RelativeWeight %5 "
-        "-ExposeVirtualizationExtensions $%6 -EnableHostResourceProtection $%7")
-        .arg(quotePS(vmName))
-        .arg(settings.count)
-        .arg(settings.reserve)
-        .arg(settings.limit)
-        .arg(settings.weight)
-        .arg(settings.exposeVirtualizationExtensions ? "true" : "false")
-        .arg(settings.hideHypervisor ? "true" : "false");
+    QString cmd = "$vmn = " + quotePS(vmName) + "; ";
+    cmd += "Set-VMProcessor -VMName $vmn";
+    cmd += " -Count " + QString::number(settings.count);
+    cmd += " -Reserve " + QString::number(settings.reserve);
+    cmd += " -Maximum " + QString::number(settings.limit);
+    cmd += " -RelativeWeight " + QString::number(settings.weight);
+    cmd += QString(" -ExposeVirtualizationExtensions $%1").arg(settings.exposeVirtualizationExtensions ? "true" : "false");
+    cmd += QString(" -EnableHostResourceProtection $%1").arg(settings.enableHostResourceProtection ? "true" : "false");
+    cmd += QString(" -CompatibilityForMigrationEnabled $%1").arg(settings.compatibilityForMigrationEnabled ? "true" : "false");
+    cmd += QString(" -CompatibilityForOlderOperatingSystemsEnabled $%1").arg(settings.compatibilityForOlderOperatingSystemsEnabled ? "true" : "false");
+    cmd += " -HwThreadCountPerCore " + QString::number(settings.hwThreadCountPerCore);
+    cmd += "; $vm = Get-WmiObject -Namespace 'root\\virtualization\\v2' "
+           "-Class Msvm_ComputerSystem -Filter ('ElementName=''' + $vmn + ''''); "
+           "$vssd = ($vm.GetRelated('Msvm_VirtualSystemSettingData') | Select-Object -First 1); "
+           "$proc = ($vssd.GetRelated('Msvm_ProcessorSettingData') | Select-Object -First 1); "
+           "$proc.HideHypervisorPresent = $" + QString(settings.hideHypervisorPresent ? "true" : "false") + "; "
+           "$proc.AllowACountMCount = $" + QString(settings.allowACountMCount ? "true" : "false") + "; "
+           "$proc.DisableSpeculationControls = $" + QString(settings.disableSpeculationControls ? "true" : "false") + "; "
+           "$proc.EnableSocketTopology = $" + QString(settings.enableSocketTopology ? "true" : "false") + "; "
+           "$mgmt = Get-WmiObject -Namespace 'root\\virtualization\\v2' "
+           "-Class Msvm_VirtualSystemManagementService; "
+           "$null = $mgmt.ModifyResourceSettings(@($proc.GetText(1)))";
     runPowerShellAsync(cmd, vmName, "应用处理器设置");
 }
 

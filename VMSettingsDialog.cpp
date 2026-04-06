@@ -6,6 +6,7 @@
 #include <QHeaderView>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
@@ -53,6 +54,28 @@ QWidget* VMSettingsDialog::createFormRow(const QString& label, QWidget *field)
     text->setWordWrap(false);
     text->setTextPixelSize(15);
     layout->addWidget(text);
+    layout->addStretch();
+    layout->addWidget(field);
+    return area;
+}
+
+QWidget* VMSettingsDialog::createFormRowWithDesc(const QString& label, const QString& desc, QWidget *field)
+{
+    ElaScrollPageArea *area = new ElaScrollPageArea(this);
+    QHBoxLayout *layout = new QHBoxLayout(area);
+    QVBoxLayout *textLayout = new QVBoxLayout();
+    textLayout->setSpacing(2);
+    ElaText *title = new ElaText(label, this);
+    title->setWordWrap(false);
+    title->setTextPixelSize(15);
+    ElaText *descText = new ElaText(desc, this);
+    descText->setWordWrap(false);
+    descText->setTextPixelSize(11);
+    descText->setMinimumWidth(400);
+    descText->setStyleSheet("color: #888;");
+    textLayout->addWidget(title);
+    textLayout->addWidget(descText);
+    layout->addLayout(textLayout);
     layout->addStretch();
     layout->addWidget(field);
     return area;
@@ -556,7 +579,20 @@ VMSettingsDialog::VMSettingsDialog(const QString& vmName, QWidget *parent)
     _cpuWeightSpinBox->setFixedWidth(120);
 
     _nestedVirtSwitch = new ElaToggleSwitch(this);
-    _hideHypervisorSwitch = new ElaToggleSwitch(this);
+    _hostResProtectSwitch = new ElaToggleSwitch(this);
+    _migrationCompatSwitch = new ElaToggleSwitch(this);
+    _legacyCompatSwitch = new ElaToggleSwitch(this);
+
+    _smtCombo = new ElaComboBox(this);
+    _smtCombo->addItem("继承宿主机", 0);
+    _smtCombo->addItem("单线程", 1);
+    _smtCombo->addItem("多线程", 2);
+    _smtCombo->setFixedWidth(150);
+
+    _hideHypervisorPresentSwitch = new ElaToggleSwitch(this);
+    _allowACountMCountSwitch = new ElaToggleSwitch(this);
+    _disableSpectreSwitch = new ElaToggleSwitch(this);
+    _socketTopologySwitch = new ElaToggleSwitch(this);
 
     ElaPushButton *applyProcBtn = new ElaPushButton("应用处理器设置", this);
     applyProcBtn->setElaIcon(ElaIconType::Check, 14);
@@ -569,27 +605,62 @@ VMSettingsDialog::VMSettingsDialog(const QString& vmName, QWidget *parent)
         s.limit = _cpuLimitSpinBox->value();
         s.weight = _cpuWeightSpinBox->value();
         s.exposeVirtualizationExtensions = _nestedVirtSwitch->getIsToggled();
-        s.nestedVirtualization = s.exposeVirtualizationExtensions;
-        s.hideHypervisor = _hideHypervisorSwitch->getIsToggled();
+        s.enableHostResourceProtection = _hostResProtectSwitch->getIsToggled();
+        s.compatibilityForMigrationEnabled = _migrationCompatSwitch->getIsToggled();
+        s.compatibilityForOlderOperatingSystemsEnabled = _legacyCompatSwitch->getIsToggled();
+        s.hwThreadCountPerCore = _smtCombo->currentData().toInt();
+        s.hideHypervisorPresent = _hideHypervisorPresentSwitch->getIsToggled();
+        s.allowACountMCount = _allowACountMCountSwitch->getIsToggled();
+        s.disableSpeculationControls = _disableSpectreSwitch->getIsToggled();
+        s.enableSocketTopology = _socketTopologySwitch->getIsToggled();
         HyperVManager::getInstance()->applyVMProcessorAdvanced(_vmName, s);
         ElaMessageBar::information(ElaMessageBarType::BottomRight, "信息", "正在应用处理器设置...", 2000);
     });
 
-    QWidget *advCpuContent = new QWidget(this);
-    QVBoxLayout *advCpuLayout = new QVBoxLayout(advCpuContent);
+    QWidget *advCpuInner = new QWidget(this);
+    QVBoxLayout *advCpuLayout = new QVBoxLayout(advCpuInner);
     advCpuLayout->setContentsMargins(0, 0, 0, 0);
-    advCpuLayout->addSpacing(30);
-    advCpuLayout->addWidget(createFormRow("CPU 预留", _cpuReserveSpinBox));
-    advCpuLayout->addWidget(createFormRow("CPU 上限", _cpuLimitSpinBox));
-    advCpuLayout->addWidget(createFormRow("相对权重", _cpuWeightSpinBox));
-    advCpuLayout->addWidget(createFormRow("嵌套虚拟化", _nestedVirtSwitch));
-    advCpuLayout->addWidget(createFormRow("宿主机资源保护", _hideHypervisorSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("CPU 预留",
+        "为此虚拟机保留的最低 CPU 资源百分比", _cpuReserveSpinBox));
+    advCpuLayout->addWidget(createFormRowWithDesc("CPU 上限",
+        "此虚拟机可使用的最大 CPU 资源百分比", _cpuLimitSpinBox));
+    advCpuLayout->addWidget(createFormRowWithDesc("相对权重",
+        "CPU 资源竞争时的优先级权重，值越大优先级越高", _cpuWeightSpinBox));
+    advCpuLayout->addWidget(createFormRowWithDesc("嵌套虚拟化",
+        "允许虚拟机内运行 Hyper-V 或其他虚拟化技术", _nestedVirtSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("宿主机资源保护",
+        "限制 VMBus 通信频率，防止恶意虚拟机消耗宿主机资源", _hostResProtectSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("迁移兼容性",
+        "屏蔽 CPU 指令集，以便在不同版本的宿主机间迁移", _migrationCompatSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("老旧系统兼容性",
+        "屏蔽 CPU 指令集，提高对老旧操作系统的兼容性", _legacyCompatSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("虚拟机 SMT",
+        "同步多线程设置，优化内核缓存利用与进程调度", _smtCombo));
+    advCpuLayout->addWidget(createFormRowWithDesc("隐藏虚拟化标识",
+        "隐藏 Hypervisor 标识符，可能有助于绕过软件虚拟化检测", _hideHypervisorPresentSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("暴露频率监视寄存器",
+        "允许虚拟机读取处理器真实频率 (APERF/MPERF)", _allowACountMCountSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("禁用侧信道攻击缓解",
+        "禁用漏洞补丁 (如 Spectre)，提升性能但降低安全性", _disableSpectreSwitch));
+    advCpuLayout->addWidget(createFormRowWithDesc("启用插槽拓扑",
+        "映射物理插槽拓扑，优化多插槽软件的运行环境", _socketTopologySwitch));
     advCpuLayout->addStretch();
+
+    QScrollArea *advCpuScroll = new QScrollArea(this);
+    advCpuScroll->setWidgetResizable(true);
+    advCpuScroll->setWidget(advCpuInner);
+    advCpuScroll->setFrameShape(QFrame::NoFrame);
+
+    QWidget *advCpuContent = new QWidget(this);
+    QVBoxLayout *advCpuOuterLayout = new QVBoxLayout(advCpuContent);
+    advCpuOuterLayout->setContentsMargins(0, 0, 0, 0);
+    advCpuOuterLayout->addSpacing(30);
+    advCpuOuterLayout->addWidget(advCpuScroll);
     QHBoxLayout *procBtnLayout = new QHBoxLayout();
     procBtnLayout->addStretch();
     procBtnLayout->addWidget(applyProcBtn);
-    advCpuLayout->addLayout(procBtnLayout);
-    advCpuLayout->addSpacing(10);
+    advCpuOuterLayout->addLayout(procBtnLayout);
+    advCpuOuterLayout->addSpacing(10);
     _stackedWidget->addWidget(advCpuContent);
 
     _memBufferSpinBox = new ElaSpinBox(this);
@@ -950,7 +1021,19 @@ void VMSettingsDialog::loadProcessorAdvanced()
         guard->_cpuLimitSpinBox->setValue(s.limit);
         guard->_cpuWeightSpinBox->setValue(s.weight);
         guard->_nestedVirtSwitch->setIsToggled(s.exposeVirtualizationExtensions);
-        guard->_hideHypervisorSwitch->setIsToggled(s.hideHypervisor);
+        guard->_hostResProtectSwitch->setIsToggled(s.enableHostResourceProtection);
+        guard->_migrationCompatSwitch->setIsToggled(s.compatibilityForMigrationEnabled);
+        guard->_legacyCompatSwitch->setIsToggled(s.compatibilityForOlderOperatingSystemsEnabled);
+        for (int i = 0; i < guard->_smtCombo->count(); ++i)
+            if (guard->_smtCombo->itemData(i).toInt() == s.hwThreadCountPerCore)
+            {
+                guard->_smtCombo->setCurrentIndex(i);
+                break;
+            }
+        guard->_hideHypervisorPresentSwitch->setIsToggled(s.hideHypervisorPresent);
+        guard->_allowACountMCountSwitch->setIsToggled(s.allowACountMCount);
+        guard->_disableSpectreSwitch->setIsToggled(s.disableSpeculationControls);
+        guard->_socketTopologySwitch->setIsToggled(s.enableSocketTopology);
     });
 }
 

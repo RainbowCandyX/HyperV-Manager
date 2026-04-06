@@ -117,10 +117,15 @@ struct VMProcessorAdvancedSettings
     int reserve{0};
     int limit{100};
     int weight{100};
-    bool nestedVirtualization{false};
     bool exposeVirtualizationExtensions{false};
-    QString compatibilityForMigration;
-    bool hideHypervisor{false};
+    bool enableHostResourceProtection{false};
+    bool compatibilityForMigrationEnabled{false};
+    bool compatibilityForOlderOperatingSystemsEnabled{false};
+    int hwThreadCountPerCore{0}; // 0=inherit, 1=single, 2=multi
+    bool hideHypervisorPresent{false};
+    bool allowACountMCount{false};
+    bool disableSpeculationControls{false};
+    bool enableSocketTopology{false};
 };
 
 struct VMSummaryInfo

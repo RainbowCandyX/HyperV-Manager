@@ -736,8 +736,22 @@ void VirtualMachinePage::refreshDeviceInfo()
         guard->_cpuContentLayout->addWidget(makeDetailText(QString("处理器数量: %1").arg(s.count)));
         guard->_cpuContentLayout->addWidget(makeDetailText(QString("预留: %1%  限制: %2%  权重: %3").arg(s.reserve).arg(s.limit).arg(s.weight)));
         guard->_cpuContentLayout->addWidget(makeDetailText(QString("嵌套虚拟化: %1").arg(s.exposeVirtualizationExtensions ? "已启用" : "未启用")));
-        if (s.hideHypervisor)
-            guard->_cpuContentLayout->addWidget(makeDetailText("隐藏虚拟机监控程序: 是"));
+        if (s.enableHostResourceProtection)
+            guard->_cpuContentLayout->addWidget(makeDetailText("宿主机资源保护: 已启用"));
+        if (s.compatibilityForMigrationEnabled)
+            guard->_cpuContentLayout->addWidget(makeDetailText("迁移兼容性: 已启用"));
+        if (s.compatibilityForOlderOperatingSystemsEnabled)
+            guard->_cpuContentLayout->addWidget(makeDetailText("老旧系统兼容性: 已启用"));
+        if (s.hwThreadCountPerCore > 0)
+            guard->_cpuContentLayout->addWidget(makeDetailText(QString("SMT: %1").arg(s.hwThreadCountPerCore == 1 ? "单线程" : "多线程")));
+        if (s.hideHypervisorPresent)
+            guard->_cpuContentLayout->addWidget(makeDetailText("隐藏虚拟化标识: 已启用"));
+        if (s.allowACountMCount)
+            guard->_cpuContentLayout->addWidget(makeDetailText("频率监视寄存器: 已启用"));
+        if (s.disableSpeculationControls)
+            guard->_cpuContentLayout->addWidget(makeDetailText("侧信道攻击缓解: 已禁用"));
+        if (s.enableSocketTopology)
+            guard->_cpuContentLayout->addWidget(makeDetailText("插槽拓扑: 已启用"));
     });
 
     HyperVManager::getInstance()->getVMMemoryAdvancedAsync(vmName, [guard, vmName, makeDetailText](const VMMemoryAdvancedSettings& s, const QString& error)

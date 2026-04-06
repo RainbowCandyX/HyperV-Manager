@@ -23,6 +23,7 @@ public:
 
 private:
     QWidget* createFormRow(const QString& label, QWidget *field);
+    QWidget* createFormRowWithDesc(const QString& label, const QString& desc, QWidget *field);
     QWidget* createPageContent(const QList<QWidget*>& rows, bool showButtons);
     void loadSettings();
     void applySettings();
@@ -71,7 +72,14 @@ private:
     ElaSpinBox *_cpuLimitSpinBox{nullptr};
     ElaSpinBox *_cpuWeightSpinBox{nullptr};
     ElaToggleSwitch *_nestedVirtSwitch{nullptr};
-    ElaToggleSwitch *_hideHypervisorSwitch{nullptr};
+    ElaToggleSwitch *_hostResProtectSwitch{nullptr};
+    ElaToggleSwitch *_migrationCompatSwitch{nullptr};
+    ElaToggleSwitch *_legacyCompatSwitch{nullptr};
+    ElaComboBox *_smtCombo{nullptr};
+    ElaToggleSwitch *_hideHypervisorPresentSwitch{nullptr};
+    ElaToggleSwitch *_allowACountMCountSwitch{nullptr};
+    ElaToggleSwitch *_disableSpectreSwitch{nullptr};
+    ElaToggleSwitch *_socketTopologySwitch{nullptr};
 
     ElaSpinBox *_memBufferSpinBox{nullptr};
     ElaSpinBox *_memWeightSpinBox{nullptr};
